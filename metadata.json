@@ -1,0 +1,7 @@
+{
+  "name": "Copy of Lumateck POS",
+  "description": "Sistema de gestão empresarial completo para lojas de celulares e acessórios, com PDV, controle de estoque, financeiro e dashboard avançado.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
