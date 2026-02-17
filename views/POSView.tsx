@@ -1,24 +1,47 @@
 
 import React, { useState, useRef } from 'react';
-import { Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, QrCode, Receipt, DollarSign, X, Package } from 'lucide-react';
-import { Product, SaleItem, Sale } from '../types';
+import { 
+  Search, ShoppingCart, Trash2, Plus, Minus, CreditCard, Banknote, 
+  QrCode, Receipt, DollarSign, X, Package, UserPlus, UserCheck, 
+  FileCheck, ShieldCheck, Printer, Loader2, CheckCircle2 
+} from 'lucide-react';
+import { Product, SaleItem, Sale, Customer } from '../types';
 
 interface POSViewProps {
   products: Product[];
+  customers: Customer[];
+  setCustomers: React.Dispatch<React.SetStateAction<Customer[]>>;
   onCompleteSale: (sale: Sale) => void;
 }
 
-const POSView: React.FC<POSViewProps> = ({ products, onCompleteSale }) => {
+const POSView: React.FC<POSViewProps> = ({ products, customers, setCustomers, onCompleteSale }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [cart, setCart] = useState<SaleItem[]>([]);
   const [discount, setDiscount] = useState(0);
   const [showCheckout, setShowCheckout] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('Cartão');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [showCustomerSearch, setShowCustomerSearch] = useState(false);
+  const [custSearchTerm, setCustSearchTerm] = useState('');
+  const [showNewCustForm, setShowNewCustForm] = useState(false);
+  const [newCust, setNewCust] = useState<Partial<Customer>>({ name: '', phone: '', cpf: '' });
+  
+  // Estados de NFC-e
+  const [shouldEmitNfce, setShouldEmitNfce] = useState(true);
+  const [isEmitting, setIsEmitting] = useState(false);
+  const [emitSuccess, setEmitSuccess] = useState(false);
+  const [lastNfceKey, setLastNfceKey] = useState('');
+
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const filteredProducts = products.filter(p => 
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
     p.code.includes(searchTerm)
+  );
+
+  const filteredCustomers = customers.filter(c => 
+    c.name.toLowerCase().includes(custSearchTerm.toLowerCase()) || 
+    c.cpf.includes(custSearchTerm)
   );
 
   const addToCart = (product: Product) => {
@@ -53,24 +76,71 @@ const POSView: React.FC<POSViewProps> = ({ products, onCompleteSale }) => {
     }));
   };
 
+  const handleCreateCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    const customer: Customer = {
+      ...newCust as Customer,
+      id: `c-${Date.now()}`,
+      email: '', address: '', birthday: '',
+      totalSpent: 0
+    };
+    setCustomers([customer, ...customers]);
+    setSelectedCustomer(customer);
+    setShowNewCustForm(false);
+    setShowCustomerSearch(false);
+    setNewCust({ name: '', phone: '', cpf: '' });
+  };
+
   const subtotal = cart.reduce((acc, item) => acc + (item.product.salePrice * item.quantity), 0);
   const total = subtotal - discount;
 
-  const handleFinishSale = () => {
-    const newSale: Sale = {
-      id: `sale-${Date.now()}`,
-      date: new Date().toISOString(),
-      items: [...cart],
-      total: total,
-      paymentMethod: [paymentMethod],
-      status: 'COMPLETA'
-    };
-    
-    onCompleteSale(newSale);
+  const handleFinishSale = async () => {
+    if (shouldEmitNfce) {
+      setIsEmitting(true);
+      // Simulação de delay de comunicação com SEFAZ
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      
+      const key = Array.from({length: 44}, () => Math.floor(Math.random() * 10)).join('');
+      setLastNfceKey(key);
+      setIsEmitting(false);
+      setEmitSuccess(true);
+      
+      const newSale: Sale = {
+        id: `sale-${Date.now()}`,
+        date: new Date().toISOString(),
+        items: [...cart],
+        total: total,
+        paymentMethod: [paymentMethod],
+        status: 'COMPLETA',
+        customerId: selectedCustomer?.id,
+        nfceKey: key,
+        nfceStatus: 'EMITIDA'
+      };
+      
+      onCompleteSale(newSale);
+    } else {
+      const newSale: Sale = {
+        id: `sale-${Date.now()}`,
+        date: new Date().toISOString(),
+        items: [...cart],
+        total: total,
+        paymentMethod: [paymentMethod],
+        status: 'COMPLETA',
+        customerId: selectedCustomer?.id
+      };
+      onCompleteSale(newSale);
+      resetPOS();
+      alert('Venda realizada com sucesso!');
+    }
+  };
+
+  const resetPOS = () => {
     setCart([]);
     setDiscount(0);
     setShowCheckout(false);
-    alert('Venda realizada com sucesso!');
+    setSelectedCustomer(null);
+    setEmitSuccess(false);
+    setIsEmitting(false);
   };
 
   return (
@@ -119,19 +189,87 @@ const POSView: React.FC<POSViewProps> = ({ products, onCompleteSale }) => {
           {filteredProducts.length === 0 && (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
               <Package className="w-16 h-16 mb-4 opacity-20" />
-              <p className="text-lg font-medium">Nenhum produto em estoque</p>
+              <p className="text-lg font-medium">Nenhum produto encontrado</p>
             </div>
           )}
         </div>
       </div>
 
       <div className="w-full md:w-[450px] flex flex-col bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="text-[#1E3A8A]" />
-            <h3 className="text-lg font-bold text-slate-800">Carrinho</h3>
+        <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="text-[#1E3A8A]" />
+              <h3 className="text-lg font-bold text-slate-800">Carrinho</h3>
+            </div>
+            <span className="bg-[#1E3A8A] text-white px-3 py-1 rounded-full text-xs font-bold">{cart.length}</span>
           </div>
-          <span className="bg-[#1E3A8A] text-white px-3 py-1 rounded-full text-xs font-bold">{cart.length}</span>
+
+          <div className="relative">
+            {selectedCustomer ? (
+              <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
+                <div className="flex items-center gap-3 text-emerald-700">
+                  <UserCheck size={18} />
+                  <div className="text-left">
+                    <p className="text-xs font-black uppercase tracking-tight">{selectedCustomer.name}</p>
+                    <p className="text-[10px] opacity-70">{selectedCustomer.cpf}</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedCustomer(null)} className="text-emerald-400 hover:text-rose-500"><X size={16} /></button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setShowCustomerSearch(true)}
+                className="w-full flex items-center justify-between p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-blue-300 hover:text-blue-500 transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <UserPlus size={18} />
+                  <span className="text-xs font-bold uppercase">Vincular Cliente</span>
+                </div>
+                <Plus size={16} />
+              </button>
+            )}
+            
+            {showCustomerSearch && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-4 max-h-80 overflow-y-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="text-xs font-black text-slate-800 uppercase">Buscar Cliente</h4>
+                  <button onClick={() => setShowCustomerSearch(false)}><X size={16}/></button>
+                </div>
+                <div className="relative mb-4">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text" 
+                    placeholder="Nome ou CPF..."
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs"
+                    value={custSearchTerm}
+                    onChange={(e) => setCustSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  {filteredCustomers.map(c => (
+                    <button 
+                      key={c.id} 
+                      onClick={() => { setSelectedCustomer(c); setShowCustomerSearch(false); }}
+                      className="w-full p-3 text-left hover:bg-blue-50 rounded-xl transition-colors flex items-center justify-between group"
+                    >
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">{c.name}</p>
+                        <p className="text-[10px] text-slate-400">{c.cpf}</p>
+                      </div>
+                      <Plus size={14} className="text-slate-300 group-hover:text-blue-500" />
+                    </button>
+                  ))}
+                  <button 
+                    onClick={() => setShowNewCustForm(true)}
+                    className="w-full p-3 text-center border border-dashed border-blue-200 rounded-xl text-blue-500 text-xs font-bold uppercase hover:bg-blue-50"
+                  >
+                    + Novo Cliente
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -191,57 +329,157 @@ const POSView: React.FC<POSViewProps> = ({ products, onCompleteSale }) => {
         </div>
       </div>
 
-      {showCheckout && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-3xl p-8 w-full max-w-xl shadow-2xl relative animate-scaleIn">
-            <button onClick={() => setShowCheckout(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors">
-              <X size={24} />
-            </button>
-            <div className="mb-8">
-              <h2 className="text-3xl font-black text-slate-800">Pagamento</h2>
-              <p className="text-slate-500 font-medium">Selecione o método e finalize</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 mb-8">
-              {[
-                { name: 'Cartão', icon: CreditCard },
-                { name: 'Dinheiro', icon: Banknote },
-                { name: 'Pix', icon: QrCode },
-                { name: 'Outros', icon: DollarSign },
-              ].map(m => (
-                <button 
-                  key={m.name}
-                  onClick={() => setPaymentMethod(m.name)}
-                  className={`flex items-center gap-4 p-5 rounded-2xl border-2 transition-all ${
-                    paymentMethod === m.name ? 'border-[#1E3A8A] bg-blue-50 text-[#1E3A8A]' : 'border-slate-100 hover:border-slate-200 text-slate-600'
-                  }`}
-                >
-                  <m.icon size={24} />
-                  <span className="font-black text-sm uppercase">{m.name}</span>
-                </button>
-              ))}
-            </div>
-
-            <div className="bg-[#1E3A8A] rounded-2xl p-6 text-white mb-8 shadow-inner">
-              <div className="flex justify-between items-end">
+      {showNewCustForm && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl relative">
+            <button onClick={() => setShowNewCustForm(false)} className="absolute top-6 right-6 text-slate-400"><X size={24} /></button>
+            <h2 className="text-2xl font-black text-slate-800 mb-6 uppercase tracking-tight">Novo Cliente</h2>
+            <form onSubmit={handleCreateCustomer} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Nome</label>
+                <input required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl" value={newCust.name} onChange={e => setNewCust({...newCust, name: e.target.value})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase opacity-60">Total a pagar</p>
-                  <h2 className="text-4xl font-black tracking-tighter">R$ {total.toFixed(2)}</h2>
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">WhatsApp</label>
+                  <input required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl" value={newCust.phone} onChange={e => setNewCust({...newCust, phone: e.target.value})} />
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold uppercase opacity-60">Itens</p>
-                  <p className="text-xl font-black">{cart.length}</p>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">CPF</label>
+                  <input required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl" value={newCust.cpf} onChange={e => setNewCust({...newCust, cpf: e.target.value})} />
                 </div>
               </div>
-            </div>
-
-            <div className="flex gap-4">
-              <button onClick={() => setShowCheckout(false)} className="flex-1 py-4 rounded-xl border-2 border-slate-200 font-bold text-slate-500 hover:bg-slate-50">Voltar</button>
-              <button onClick={handleFinishSale} className="flex-[2] py-4 rounded-xl bg-[#6D28D9] text-white font-black text-lg hover:opacity-90 shadow-xl shadow-purple-100">FINALIZAR AGORA</button>
-            </div>
+              <button type="submit" className="w-full py-5 bg-[#1E3A8A] text-white font-black rounded-2xl shadow-xl mt-4">CADASTRAR E VINCULAR</button>
+            </form>
           </div>
         </div>
       )}
+
+      {showCheckout && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl p-8 w-full max-w-xl shadow-2xl relative animate-scaleIn">
+            {!isEmitting && !emitSuccess && (
+              <>
+                <button onClick={() => setShowCheckout(false)} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors">
+                  <X size={24} />
+                </button>
+                <div className="mb-8">
+                  <h2 className="text-3xl font-black text-slate-800">Pagamento</h2>
+                  <p className="text-slate-500 font-medium">Selecione o método e finalize</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mb-8">
+                  {[
+                    { name: 'Cartão', icon: CreditCard },
+                    { name: 'Dinheiro', icon: Banknote },
+                    { name: 'Pix', icon: QrCode },
+                    { name: 'Outros', icon: DollarSign },
+                  ].map(m => (
+                    <button 
+                      key={m.name}
+                      onClick={() => setPaymentMethod(m.name)}
+                      className={`flex items-center gap-4 p-5 rounded-2xl border-2 transition-all ${
+                        paymentMethod === m.name ? 'border-[#1E3A8A] bg-blue-50 text-[#1E3A8A]' : 'border-slate-100 hover:border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      <m.icon size={24} />
+                      <span className="font-black text-sm uppercase">{m.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-6 mb-8 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl ${shouldEmitNfce ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                      <FileCheck size={20} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-black uppercase text-slate-800">Emissão de NFC-e</p>
+                      <p className="text-[10px] font-bold text-slate-400">Nota Fiscal Eletrônica (Consumidor)</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setShouldEmitNfce(!shouldEmitNfce)}
+                    className={`w-14 h-8 rounded-full transition-all flex items-center px-1 ${shouldEmitNfce ? 'bg-blue-600 justify-end' : 'bg-slate-300 justify-start'}`}
+                  >
+                    <div className="w-6 h-6 bg-white rounded-full shadow-md"></div>
+                  </button>
+                </div>
+
+                <div className="bg-[#1E3A8A] rounded-2xl p-6 text-white mb-8 shadow-inner">
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-xs font-bold uppercase opacity-60">Total a pagar</p>
+                      <h2 className="text-4xl font-black tracking-tighter">R$ {total.toFixed(2)}</h2>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-bold uppercase opacity-60">Cliente</p>
+                      <p className="text-lg font-black truncate max-w-[150px]">{selectedCustomer?.name || 'Consumidor Final'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <button onClick={() => setShowCheckout(false)} className="flex-1 py-4 rounded-xl border-2 border-slate-200 font-bold text-slate-500 hover:bg-slate-50">Voltar</button>
+                  <button onClick={handleFinishSale} className="flex-[2] py-4 rounded-xl bg-[#6D28D9] text-white font-black text-lg hover:opacity-90 shadow-xl shadow-purple-100 flex items-center justify-center gap-2">
+                    {shouldEmitNfce && <ShieldCheck size={20} />}
+                    FINALIZAR VENDA
+                  </button>
+                </div>
+              </>
+            )}
+
+            {isEmitting && (
+              <div className="py-20 flex flex-col items-center text-center animate-fadeIn">
+                <Loader2 size={64} className="text-blue-600 animate-spin mb-6" />
+                <h2 className="text-2xl font-black text-slate-800 mb-2">Comunicando com SEFAZ...</h2>
+                <p className="text-slate-500 font-medium">Assinando e transmitindo nota fiscal eletrônica.</p>
+                <div className="mt-8 w-full max-w-xs bg-slate-100 h-2 rounded-full overflow-hidden">
+                  <div className="bg-blue-600 h-full animate-[loading_2s_ease-in-out_infinite]"></div>
+                </div>
+              </div>
+            )}
+
+            {emitSuccess && (
+              <div className="py-12 flex flex-col items-center text-center animate-scaleIn">
+                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
+                  <CheckCircle2 size={48} />
+                </div>
+                <h2 className="text-3xl font-black text-slate-800 mb-2">Venda Finalizada!</h2>
+                <p className="text-emerald-600 font-bold uppercase text-[10px] tracking-widest mb-8">NFC-e Emitida com Sucesso</p>
+                
+                <div className="w-full bg-slate-50 border border-slate-200 rounded-3xl p-6 mb-8 text-left">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Chave de Acesso</p>
+                  <p className="text-[11px] font-mono font-bold text-slate-600 break-all bg-white p-4 rounded-xl border border-slate-100">
+                    {lastNfceKey}
+                  </p>
+                  <div className="mt-4 flex items-center justify-between text-xs font-bold text-slate-500">
+                    <span>Protocolo: 135240003456789</span>
+                    <span>Ambiente: Produção</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 w-full">
+                  <button onClick={() => window.print()} className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl flex items-center justify-center gap-3 hover:bg-black">
+                    <Printer size={20} /> IMPRIMIR DANFE (Cupom)
+                  </button>
+                  <button onClick={resetPOS} className="w-full py-4 bg-white border-2 border-slate-200 text-slate-600 font-black rounded-2xl hover:bg-slate-50">
+                    NOVA VENDA
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes loading {
+          0% { width: 0; }
+          50% { width: 70%; }
+          100% { width: 100%; }
+        }
+      `}</style>
     </div>
   );
 };

@@ -1,11 +1,13 @@
 
 import React, { useState } from 'react';
-import { Wallet, ArrowUpCircle, ArrowDownCircle, PieChart, Plus, Trash2, X } from 'lucide-react';
+import { Wallet, ArrowUpCircle, ArrowDownCircle, Plus, Trash2, X } from 'lucide-react';
 import { Transaction } from '../types';
 
 interface FinanceProps {
   transactions: Transaction[];
   onAddTransaction: (t: Transaction) => void;
+  // Note: For a real app, we'd need a setTransactions here, but following current architecture 
+  // we'll at least make the UI and Add work perfectly.
 }
 
 const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction }) => {
@@ -34,21 +36,21 @@ const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction })
     <div className="space-y-6 animate-fadeIn">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-gradient-to-br from-[#1E3A8A] to-[#6D28D9] p-8 rounded-3xl text-white shadow-xl">
-          <p className="text-sm opacity-80 mb-1 font-bold">Saldo em Caixa</p>
-          <h2 className="text-4xl font-black mb-4">R$ {balance.toLocaleString('pt-br')}</h2>
-          <div className="flex items-center gap-2 text-emerald-300 text-xs font-black uppercase">
-            <ArrowUpCircle size={14} /> Sistema Ativo
+          <p className="text-sm opacity-80 mb-1 font-bold">Saldo Disponível</p>
+          <h2 className="text-4xl font-black mb-4 tracking-tighter">R$ {balance.toLocaleString('pt-br', { minimumFractionDigits: 2 })}</h2>
+          <div className="flex items-center gap-2 text-emerald-300 text-[10px] font-black uppercase tracking-widest bg-white/10 w-fit px-3 py-1 rounded-full">
+            <ArrowUpCircle size={14} /> Caixa em Operação
           </div>
         </div>
 
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Entradas</p>
-          <h2 className="text-3xl font-black text-emerald-500">R$ {totalIn.toLocaleString('pt-br')}</h2>
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Receitas</p>
+          <h2 className="text-3xl font-black text-emerald-500">R$ {totalIn.toLocaleString('pt-br', { minimumFractionDigits: 2 })}</h2>
         </div>
 
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Saídas</p>
-          <h2 className="text-3xl font-black text-rose-500">R$ {totalOut.toLocaleString('pt-br')}</h2>
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Total Despesas</p>
+          <h2 className="text-3xl font-black text-rose-500">R$ {totalOut.toLocaleString('pt-br', { minimumFractionDigits: 2 })}</h2>
         </div>
       </div>
 
@@ -57,7 +59,7 @@ const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction })
           <h3 className="font-black text-slate-800 tracking-tight">Fluxo de Caixa Mensal</h3>
           <button 
             onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-all"
+            className="flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-black hover:bg-black transition-all shadow-lg"
           >
             <Plus size={16} /> NOVO LANÇAMENTO
           </button>
@@ -65,9 +67,9 @@ const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction })
         <div className="overflow-x-auto">
           {transactions.length > 0 ? (
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-slate-400 font-black uppercase text-[10px]">
+              <thead className="bg-slate-50 text-slate-400 font-black uppercase text-[10px] tracking-widest">
                 <tr>
-                  <th className="px-8 py-4">Descrição</th>
+                  <th className="px-8 py-4">Lançamento</th>
                   <th className="px-8 py-4">Categoria</th>
                   <th className="px-8 py-4">Data</th>
                   <th className="px-8 py-4 text-right">Valor</th>
@@ -84,10 +86,10 @@ const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction })
                         <span className="font-bold text-slate-700">{t.description}</span>
                       </div>
                     </td>
-                    <td className="px-8 py-4 font-medium text-slate-400">{t.category}</td>
-                    <td className="px-8 py-4 text-slate-400">{t.dueDate}</td>
+                    <td className="px-8 py-4 font-black text-[10px] text-slate-400 uppercase">{t.category}</td>
+                    <td className="px-8 py-4 text-slate-400 text-xs">{new Date(t.dueDate).toLocaleDateString('pt-br')}</td>
                     <td className={`px-8 py-4 text-right font-black ${t.type === 'PAGAR' ? 'text-rose-500' : 'text-emerald-600'}`}>
-                      {t.type === 'PAGAR' ? '-' : '+'} R$ {t.amount.toLocaleString('pt-br')}
+                      {t.type === 'PAGAR' ? '-' : '+'} R$ {t.amount.toLocaleString('pt-br', { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
                 ))}
@@ -96,7 +98,7 @@ const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction })
           ) : (
             <div className="py-20 flex flex-col items-center text-slate-300">
               <Wallet size={48} className="mb-4 opacity-20" />
-              <p className="font-bold uppercase text-xs tracking-widest">Nenhuma transação registrada hoje</p>
+              <p className="font-bold uppercase text-xs tracking-widest">Nenhuma transação registrada</p>
             </div>
           )}
         </div>
@@ -104,9 +106,9 @@ const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction })
 
       {showModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-white rounded-[32px] p-8 w-full max-w-lg shadow-2xl relative">
+          <div className="bg-white rounded-[32px] p-8 w-full max-w-lg shadow-2xl relative animate-scaleIn">
             <button onClick={() => setShowModal(false)} className="absolute top-6 right-6 text-slate-300 hover:text-slate-600"><X size={24} /></button>
-            <h2 className="text-2xl font-black text-slate-800 mb-6 tracking-tight">Novo Lançamento</h2>
+            <h2 className="text-2xl font-black text-slate-800 mb-6 tracking-tight">Lançamento Manual</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Descrição</label>
@@ -118,7 +120,7 @@ const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction })
                   <input required type="number" step="0.01" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl" value={newT.amount} onChange={e => setNewT({...newT, amount: parseFloat(e.target.value)})} />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tipo</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Tipo de Fluxo</label>
                   <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl" value={newT.type} onChange={e => setNewT({...newT, type: e.target.value as any})}>
                     <option value="PAGAR">Saída (Despesa)</option>
                     <option value="RECEBER">Entrada (Receita)</option>
@@ -133,10 +135,11 @@ const FinanceView: React.FC<FinanceProps> = ({ transactions, onAddTransaction })
                   <option value="Mercadoria">Compra de Mercadoria</option>
                   <option value="Salários">Salários</option>
                   <option value="Marketing">Marketing</option>
+                  <option value="Manutenção">Manutenção de Loja</option>
                   <option value="Outros">Outros</option>
                 </select>
               </div>
-              <button type="submit" className="w-full py-5 bg-[#1E3A8A] text-white font-black rounded-2xl shadow-xl mt-4">SALVAR LANÇAMENTO</button>
+              <button type="submit" className="w-full py-5 bg-[#1E3A8A] text-white font-black rounded-2xl shadow-xl mt-4 hover:opacity-90">SALVAR NO CAIXA</button>
             </form>
           </div>
         </div>

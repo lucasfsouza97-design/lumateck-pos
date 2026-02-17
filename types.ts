@@ -39,6 +39,8 @@ export interface Sale {
   paymentMethod: string[];
   status: 'COMPLETA' | 'CANCELADA' | 'ORCAMENTO';
   customerId?: string;
+  nfceKey?: string;
+  nfceStatus?: 'EMITIDA' | 'PENDENTE' | 'ERRO';
 }
 
 export interface Customer {

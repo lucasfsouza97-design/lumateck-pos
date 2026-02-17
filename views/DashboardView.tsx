@@ -1,17 +1,31 @@
 
-import React from 'react';
-import { TrendingUp, ShoppingBag, DollarSign, Users, Target, AlertTriangle } from 'lucide-react';
+import React, { useState } from 'react';
+import { TrendingUp, ShoppingBag, DollarSign, Target, AlertTriangle, Settings, X, RefreshCcw } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Sale, Product } from '../types';
 
 interface DashboardProps {
   sales: Sale[];
   products: Product[];
+  monthlyGoal: number;
+  setMonthlyGoal: (goal: number) => void;
 }
 
-const DashboardView: React.FC<DashboardProps> = ({ sales, products }) => {
+const DashboardView: React.FC<DashboardProps> = ({ sales, products, monthlyGoal, setMonthlyGoal }) => {
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [tempGoal, setTempGoal] = useState(monthlyGoal.toString());
+
   // Cálculos Reais
-  const totalRevenue = sales.reduce((acc, sale) => acc + sale.total, 0);
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  
+  const currentMonthSales = sales.filter(s => {
+    const d = new Date(s.date);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const currentMonthRevenue = currentMonthSales.reduce((acc, sale) => acc + sale.total, 0);
+  
   const dailyRevenue = sales
     .filter(s => s.date.split('T')[0] === new Date().toISOString().split('T')[0])
     .reduce((acc, s) => acc + s.total, 0);
@@ -19,11 +33,27 @@ const DashboardView: React.FC<DashboardProps> = ({ sales, products }) => {
   const lowStockCount = products.filter(p => p.stock <= p.minStock).length;
   const totalStockValue = products.reduce((acc, p) => acc + (p.costPrice * p.stock), 0);
 
+  // Saúde do Negócio (% da Meta)
+  const healthPercentage = monthlyGoal > 0 ? Math.min(100, (currentMonthRevenue / monthlyGoal) * 100) : 0;
+  
   // Dados para o gráfico (últimos 7 dias simplificado)
   const chartData = sales.slice(-7).map(s => ({
     name: new Date(s.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
     sales: s.total
   }));
+
+  const handleUpdateGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    setMonthlyGoal(parseFloat(tempGoal) || 0);
+    setShowGoalModal(false);
+  };
+
+  const handleResetGoal = () => {
+    if(confirm("Deseja realmente zerar a meta mensal? Isso 'esvaziará' o medidor de saúde do negócio.")) {
+      setMonthlyGoal(0);
+      setTempGoal("0");
+    }
+  };
 
   const StatCard = ({ title, value, icon: Icon, color, trend }: any) => (
     <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex justify-between items-start hover:shadow-md transition-all">
@@ -45,9 +75,9 @@ const DashboardView: React.FC<DashboardProps> = ({ sales, products }) => {
   return (
     <div className="space-y-8 animate-fadeIn">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Faturamento Hoje" value={`R$ ${dailyRevenue.toLocaleString('pt-br')}`} icon={TrendingUp} color="bg-blue-600" trend={12} />
-        <StatCard title="Total em Vendas" value={`R$ ${totalRevenue.toLocaleString('pt-br')}`} icon={ShoppingBag} color="bg-purple-600" />
-        <StatCard title="Valor em Estoque" value={`R$ ${totalStockValue.toLocaleString('pt-br')}`} icon={DollarSign} color="bg-indigo-600" />
+        <StatCard title="Faturamento Hoje" value={`R$ ${dailyRevenue.toLocaleString('pt-br', { minimumFractionDigits: 2 })}`} icon={TrendingUp} color="bg-blue-600" trend={12} />
+        <StatCard title="Meta Mensal" value={`R$ ${monthlyGoal.toLocaleString('pt-br', { minimumFractionDigits: 2 })}`} icon={Target} color="bg-purple-600" />
+        <StatCard title="Valor em Estoque" value={`R$ ${totalStockValue.toLocaleString('pt-br', { minimumFractionDigits: 2 })}`} icon={DollarSign} color="bg-indigo-600" />
         <StatCard title="Alertas de Estoque" value={lowStockCount} icon={AlertTriangle} color={lowStockCount > 0 ? "bg-rose-500" : "bg-emerald-500"} />
       </div>
 
@@ -73,25 +103,96 @@ const DashboardView: React.FC<DashboardProps> = ({ sales, products }) => {
           </div>
         </div>
 
-        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
-          <div className="w-16 h-16 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center mb-6">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center relative">
+          <div className="absolute top-4 right-4 flex gap-2">
+            <button 
+              onClick={() => setShowGoalModal(true)}
+              className="p-2 hover:bg-slate-50 text-slate-400 hover:text-blue-600 rounded-xl transition-all"
+              title="Configurar Meta"
+            >
+              <Settings size={18} />
+            </button>
+            <button 
+              onClick={handleResetGoal}
+              className="p-2 hover:bg-slate-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all"
+              title="Esvaziar Saúde (Zerar Meta)"
+            >
+              <RefreshCcw size={18} />
+            </button>
+          </div>
+
+          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mb-6">
             <Target size={32} />
           </div>
           <h3 className="text-xl font-black text-slate-800 mb-2">Saúde do Negócio</h3>
-          <p className="text-slate-400 text-sm mb-6">Seu ticket médio está em R$ {(totalRevenue / (sales.length || 1)).toFixed(2)}</p>
+          <p className="text-slate-400 text-sm mb-6">
+            {monthlyGoal > 0 
+              ? `Progresso: R$ ${currentMonthRevenue.toLocaleString('pt-br')} de R$ ${monthlyGoal.toLocaleString('pt-br')}`
+              : "Defina uma meta para acompanhar a saúde."}
+          </p>
           
-          <div className="relative w-40 h-40 flex items-center justify-center mb-6">
+          <div className="relative w-48 h-48 flex items-center justify-center mb-6">
             <svg className="w-full h-full transform -rotate-90">
-              <circle cx="80" cy="80" r="70" fill="transparent" stroke="#f1f5f9" strokeWidth="12" />
-              <circle cx="80" cy="80" r="70" fill="transparent" stroke="#6D28D9" strokeWidth="12" strokeDasharray="440" strokeDashoffset={440 - (440 * 0.75)} strokeLinecap="round" />
+              <circle cx="96" cy="96" r="80" fill="transparent" stroke="#f1f5f9" strokeWidth="14" />
+              <circle 
+                cx="96" 
+                cy="96" 
+                r="80" 
+                fill="transparent" 
+                stroke={healthPercentage >= 100 ? "#10b981" : "#1E3A8A"} 
+                strokeWidth="14" 
+                strokeDasharray="502.4" 
+                strokeDashoffset={502.4 - (502.4 * healthPercentage / 100)} 
+                strokeLinecap="round" 
+                className="transition-all duration-1000 ease-out"
+              />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-4xl font-black text-slate-800">75%</span>
+              <span className={`text-4xl font-black ${healthPercentage >= 100 ? 'text-emerald-600' : 'text-slate-800'}`}>
+                {Math.round(healthPercentage)}%
+              </span>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Alcançado</span>
             </div>
           </div>
-          <button className="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl hover:bg-black transition-all">Relatório Completo</button>
+          <button 
+            onClick={() => setShowGoalModal(true)}
+            className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-black transition-all flex items-center justify-center gap-2"
+          >
+            AJUSTAR META MENSAL
+          </button>
         </div>
       </div>
+
+      {/* Modal de Meta */}
+      {showGoalModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-[32px] p-8 w-full max-w-sm shadow-2xl relative animate-scaleIn">
+            <button onClick={() => setShowGoalModal(false)} className="absolute top-6 right-6 text-slate-400"><X size={24} /></button>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">Meta de Vendas</h2>
+            <p className="text-slate-400 text-sm mb-6 font-bold uppercase tracking-tight">Defina seu objetivo para este mês</p>
+            
+            <form onSubmit={handleUpdateGoal} className="space-y-4">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Valor da Meta (R$)</label>
+                <div className="relative">
+                  <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                  <input 
+                    type="number" 
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-[#1E3A8A] outline-none font-bold"
+                    placeholder="0,00"
+                    value={tempGoal}
+                    onChange={e => setTempGoal(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+              </div>
+              <button type="submit" className="w-full py-5 bg-gradient-to-r from-[#1E3A8A] to-[#6D28D9] text-white font-black rounded-2xl shadow-xl hover:opacity-90 transition-all">
+                SALVAR NOVA META
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

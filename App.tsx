@@ -39,24 +39,33 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : MOCK_TRANSACTIONS;
   });
 
+  const [monthlyGoal, setMonthlyGoal] = useState<number>(() => {
+    const saved = localStorage.getItem('lumateck_goal');
+    return saved ? parseFloat(saved) : 5000;
+  });
+
   useEffect(() => {
     localStorage.setItem('lumateck_products', JSON.stringify(products));
     localStorage.setItem('lumateck_customers', JSON.stringify(customers));
     localStorage.setItem('lumateck_sales', JSON.stringify(sales));
     localStorage.setItem('lumateck_transactions', JSON.stringify(transactions));
-  }, [products, customers, sales, transactions]);
+    localStorage.setItem('lumateck_goal', monthlyGoal.toString());
+  }, [products, customers, sales, transactions, monthlyGoal]);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (loginForm.user === 'admin' && loginForm.pass === 'admin') {
+    // Senha atualizada para 2824 conforme solicitado
+    if (loginForm.user === 'admin' && loginForm.pass === '2824') {
       setIsLoggedIn(true);
     } else {
-      alert('Usuário ou senha incorretos! (Padrão: admin / admin)');
+      alert('Usuário ou senha incorretos! (Padrão: admin / 2824)');
     }
   };
 
   const handleCompleteSale = (newSale: Sale) => {
     setSales([...sales, newSale]);
+    
+    // Atualiza estoque
     const updatedProducts = products.map(p => {
       const soldItem = newSale.items.find(item => item.product.id === p.id);
       if (soldItem) return { ...p, stock: p.stock - soldItem.quantity };
@@ -64,16 +73,60 @@ const App: React.FC = () => {
     });
     setProducts(updatedProducts);
 
+    // Atualiza total gasto do cliente se houver um vinculado
+    if (newSale.customerId) {
+      setCustomers(prev => prev.map(c => 
+        c.id === newSale.customerId ? { ...c, totalSpent: c.totalSpent + newSale.total } : c
+      ));
+    }
+
     const newTransaction: Transaction = {
       id: `t-${Date.now()}`,
       type: 'RECEBER',
-      description: `Venda #${newSale.id.slice(-4)}`,
+      description: `Venda #${newSale.id.slice(-4)} ${newSale.nfceStatus === 'EMITIDA' ? '(NFC-e)' : ''}`,
       amount: newSale.total,
       dueDate: new Date().toISOString().split('T')[0],
       status: 'PAGO',
       category: 'Vendas'
     };
     setTransactions([newTransaction, ...transactions]);
+  };
+
+  const handleUpdateSale = (updatedSale: Sale) => {
+    const oldSale = sales.find(s => s.id === updatedSale.id);
+    if (!oldSale) return;
+
+    let newProducts = [...products];
+    oldSale.items.forEach(item => {
+      newProducts = newProducts.map(p => 
+        p.id === item.product.id ? { ...p, stock: p.stock + item.quantity } : p
+      );
+    });
+
+    updatedSale.items.forEach(item => {
+      newProducts = newProducts.map(p => 
+        p.id === item.product.id ? { ...p, stock: p.stock - item.quantity } : p
+      );
+    });
+
+    if (oldSale.customerId || updatedSale.customerId) {
+      setCustomers(prev => prev.map(c => {
+        let spent = c.totalSpent;
+        if (c.id === oldSale.customerId) spent -= oldSale.total;
+        if (c.id === updatedSale.customerId) spent += updatedSale.total;
+        return { ...c, totalSpent: spent };
+      }));
+    }
+
+    setTransactions(prev => prev.map(t => 
+      t.description.includes(`Venda #${updatedSale.id.slice(-4)}`) 
+        ? { ...t, amount: updatedSale.total } 
+        : t
+    ));
+
+    setProducts(newProducts);
+    setSales(sales.map(s => s.id === updatedSale.id ? updatedSale : s));
+    alert('Venda atualizada com sucesso!');
   };
 
   const addManualTransaction = (t: Transaction) => {
@@ -133,13 +186,13 @@ const App: React.FC = () => {
 
   const renderView = () => {
     switch (currentView) {
-      case 'dashboard': return <DashboardView sales={sales} products={products} />;
-      case 'pos': return <POSView products={products} onCompleteSale={handleCompleteSale} />;
+      case 'dashboard': return <DashboardView sales={sales} products={products} monthlyGoal={monthlyGoal} setMonthlyGoal={setMonthlyGoal} />;
+      case 'pos': return <POSView products={products} customers={customers} setCustomers={setCustomers} onCompleteSale={handleCompleteSale} />;
       case 'inventory': return <InventoryView products={products} setProducts={setProducts} />;
       case 'customers': return <CustomerView customers={customers} setCustomers={setCustomers} />;
       case 'finance': return <FinanceView transactions={transactions} onAddTransaction={addManualTransaction} />;
-      case 'reports': return <ReportsView sales={sales} />;
-      default: return <DashboardView sales={sales} products={products} />;
+      case 'reports': return <ReportsView sales={sales} products={products} onUpdateSale={handleUpdateSale} />;
+      default: return <DashboardView sales={sales} products={products} monthlyGoal={monthlyGoal} setMonthlyGoal={setMonthlyGoal} />;
     }
   };
 
